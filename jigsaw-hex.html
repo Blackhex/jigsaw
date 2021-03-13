@@ -28,6 +28,7 @@
       function random() { var x = Math.sin(seed) * 10000; seed += 1; return x - Math.floor(x); }
       function uniform(min, max) { var r = random(); return min + r * (max - min); }
       function rbool() { return random() > 0.5; }
+      function tab_flip(f) { return do_random_tab && rbool() || f; }
       
       function $(id) { return document.getElementById(id); }
       
@@ -38,7 +39,7 @@
       function update_tabsize() { var val = parseFloat($("_tabsize").value); if (!isNaN(val)) { $("tabsize").value = val; } updatetabsize(); }
       function update_jitter()  { var val = parseFloat($("_jitter").value);  if (!isNaN(val)) { $("jitter").value = val; }  updatejitter(); }
       
-      function next()  { flip = rbool(); a = uniform(-j, j); b = uniform(-j, j); c = uniform(-j, j); d = uniform(-j, j); e = uniform(-j, j);}
+      function next(f) { flip = tab_flip(f); a = uniform(-j, j); b = uniform(-j, j); c = uniform(-j, j); d = uniform(-j, j); e = uniform(-j, j);}
       function l(v) { return v; }
       function w(v) { return v * (flip ? -1.0 : 1.0); }
       function p0() { return {l: l(0.0),                   w: w(0.0),}; }
@@ -58,8 +59,10 @@
          t = parseFloat($("tabsize").value) / 200.0;
          j = parseFloat($("jitter").value) / 100.0;
          n = parseInt($("rings").value);
+         do_random_tab = $("randomtab").checked
          do_warp = $("warp").checked;
          do_trunc = $("trunc").checked;
+         do_edge = $("edge").checked;
       }
       
       function scale(x, y)
@@ -156,10 +159,10 @@
          return op + vec.x + " " + vec.y + " ";
       }
       
-      function gentab(v1, v2, isnew)
+      function gentab(f, v1, v2, isnew)
       {
          var str = "";
-         next();
+         next(f);
          if (isnew)
          {
             str += lerp(p0(), v1, v2, "M ");
@@ -181,13 +184,13 @@
          var yeven = ((y + 1) % 4 == 0);
          var xeven = (x % 2 == 0);
          var yoff = (yeven ? xeven : !xeven) ? (-1.0 / 3) : (1.0 / 3);
-         
-         return gentab(process(x, y + yoff), process(x + 1, y - yoff), isnew);
+
+         return gentab(xeven == yeven, process(x, y + yoff), process(x + 1, y - yoff), isnew);
       }
       
       function vlineseg(x, y)
       {
-         return gentab(process(x, y + (1.0 / 3)), process(x, y + (5.0 / 3)), true);
+         return gentab(false, process(x, y + (1.0 / 3)), process(x, y + (5.0 / 3)), true);
       }
       
       function blineseg(x, y, isnew, rot)
@@ -211,11 +214,15 @@
       {
          var str = "";
          var yl = 2 * n - 1;
-         for (var yi = -yl + 2; yi <= yl - 2; yi = yi + 2)
+         var top = -yl + (do_edge ? 2 : 0);
+         var bottom = yl - (do_edge ? 2 : 0);
+         for (var yi = top; yi <= bottom; yi = yi + 2)
          {
             var isnew = true;
             var xl = 2 * n - 1 - (Math.abs(yi) - 1) / 2;
-            for (var xi = -xl + 1; xi < xl - 1; xi = xi + 1)
+            var left = -xl + (do_edge ? 1 : 0);
+            var right = xl - (do_edge ? 1 : 0);
+            for (var xi = left; xi < right; xi = xi + 1)
             {
                str += hlineseg(xi, yi, isnew);
                isnew = false;
@@ -231,7 +238,9 @@
          for (var yi = -yl; yi < yl; yi = yi + 2)
          {
             var xl = 2 * n - 1 - (Math.abs(yi + 1)) / 2;
-            for (var xi = -xl + 2; xi <= xl - 2; xi = xi + 2)
+            var left = -xl + (do_edge ? 2 : 0);
+            var right = xl - (do_edge ? 2 : 0);
+            for (var xi = left; xi <= right; xi = xi + 2)
             {
                str += vlineseg(xi, yi);
             }
@@ -242,8 +251,8 @@
       function gen_db()
       {
          var str = "";
-         
-         if (!do_trunc)
+
+         if (do_edge && !do_trunc)
          {
             var yi = 1 - 2 * n;
             var isnew = true;
@@ -256,7 +265,7 @@
                }
             }
          }
-         else
+         else if (do_edge)
          {
             if (do_warp)
             {
@@ -278,6 +287,11 @@
          return str;
       }
       
+      function pieces() 
+      {
+        return (3 * n * n) - (3 * n) + 1;
+      }
+
       function update()
       {
          radius = 400;
@@ -288,6 +302,7 @@
          $("puzzlepath_h").setAttribute("d", gen_dh());
          $("puzzlepath_v").setAttribute("d", gen_dv());
          $("puzzlepath_b").setAttribute("d", gen_db());
+         $("pieces").innerHTML = pieces();
       }
       
       function generate()
@@ -345,6 +360,11 @@
          <td></td>
       </tr>
       <tr>
+        <td>Random Tab Direction:</td>
+        <td><input id="randomtab" type="checkbox" checked="1" onchange="update()"/></td>
+        <td></td>
+      </tr>
+      <tr>
          <td>Circle Warp:</td>
          <td><input id="warp" type="checkbox" onchange="update()"/></td>
          <td></td>
@@ -352,8 +372,18 @@
       <tr>
          <td>Truncate Edge Pieces:</td>
          <td><input id="trunc" type="checkbox" onchange="update()"/></td>
-         <td><button onclick="generate()">Download SVG</button></td>
+         <td></td>
       </tr>
+      <tr>
+        <td>Generate Edge:</td>
+        <td><input id="edge" type="checkbox" checked="1" onchange="update()"/></td>
+        <td></td>
+     </tr>
+     <tr>
+      <td>Number of Pieces:</td>
+      <td><span id="pieces"></span></td>
+      <td><button onclick="generate()">Download SVG</button></td>
+     </tr>
    </table>
    <svg id="puzzlecontainer"><path id="puzzlepath_h" fill="none" stroke="DarkBlue"></path><path id="puzzlepath_v" fill="none" stroke="DarkRed"></path><path id="puzzlepath_b" fill="none" stroke="Black"></path></svg>
    <p><a href="index.html">Back</a></p>
